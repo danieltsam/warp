@@ -8087,6 +8087,38 @@ fn editor_keymap_context_excludes_ctrl_enter_enters_agent_view_when_rich_input_i
 }
 
 #[test]
+fn selecting_inline_profile_preserves_existing_input() {
+    App::test((), |mut app| async move {
+        let _inline_profile_selector = FeatureFlag::InlineProfileSelector.override_enabled(true);
+
+        initialize_app(&mut app);
+
+        let terminal = add_window_with_bootstrapped_terminal(&mut app, None, None).await;
+        let input = terminal.read(&app, |terminal, _| terminal.input().clone());
+        let default_profile_id = AIExecutionProfilesModel::handle(&app)
+            .read(&app, |model, _| model.default_profile_id());
+
+        input.update(&mut app, |input, ctx| {
+            input.user_insert("draft prompt", ctx);
+            input.suggestions_mode_model.update(ctx, |model, ctx| {
+                model.set_mode(InputSuggestionsMode::ProfileSelector, ctx);
+            });
+            input.handle_inline_profile_selector_event(
+                &InlineProfileSelectorEvent::SelectedProfile {
+                    profile_id: default_profile_id,
+                },
+                ctx,
+            );
+        });
+
+        input.read(&app, |input, ctx| {
+            assert!(input.suggestions_mode_model.as_ref(ctx).is_closed());
+            assert_eq!(input.buffer_text(ctx), "draft prompt");
+        });
+    });
+}
+
+#[test]
 fn enter_accepts_inline_menu_item_when_submit_on_ctrl_enter_is_true() {
     use std::cell::RefCell;
     use std::rc::Rc;
