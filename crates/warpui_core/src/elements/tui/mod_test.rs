@@ -1,5 +1,5 @@
 use super::{TuiElement, TuiRenderOutput};
-use crate::elements::tui::{TuiBuffer, TuiConstraint, TuiRect, TuiSize, TuiText};
+use crate::elements::tui::{TuiBuffer, TuiBufferExt, TuiConstraint, TuiRect, TuiSize, TuiText};
 use crate::platform::WindowStyle;
 use crate::{AddWindowOptions, App, AppContext, Entity, TuiView, TypedActionView};
 
@@ -17,7 +17,7 @@ fn unit_element_is_inert() {
     );
 
     // Painting a `()` leaves the buffer untouched.
-    let mut buffer = TuiBuffer::new(TuiSize::new(2, 1));
+    let mut buffer = TuiBuffer::empty(TuiRect::new(0, 0, 2, 1));
     element.render(TuiRect::new(0, 0, 2, 1), &mut buffer);
     assert_eq!(buffer.to_lines(), vec!["  "]);
 }
@@ -69,8 +69,8 @@ fn typed_render_output_round_trips_through_the_core_without_downcasts() {
             .expect("the TUI root view renders");
         let size = TuiSize::new(5, 1);
         element.layout(TuiConstraint::tight(size));
-        let mut buffer = TuiBuffer::new(size);
-        element.render(TuiRect::from_size(size), &mut buffer);
+        let mut buffer = TuiBuffer::empty(TuiRect::new(0, 0, size.width, size.height));
+        element.render(TuiRect::new(0, 0, size.width, size.height), &mut buffer);
         assert_eq!(buffer.to_lines(), vec!["PROBE"]);
     });
 }
