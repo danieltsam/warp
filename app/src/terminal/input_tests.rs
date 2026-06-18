@@ -1249,7 +1249,7 @@ fn send_now_event_submits_through_active_pane_and_preserves_draft() {
         let submitted_prompts = Rc::new(RefCell::new(Vec::<String>::new()));
         let submitted_prompts_for_subscription = submitted_prompts.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event: &super::Event, _| {
+            ctx.subscribe_to_view(&input, move |_, event: &super::Event, _| {
                 if let super::Event::SendAgentPrompt { prompt, .. } = event {
                     submitted_prompts_for_subscription
                         .borrow_mut()
@@ -1312,7 +1312,7 @@ fn send_now_command_event_executes_command_and_arms_in_flight() {
         let executed_commands = Rc::new(RefCell::new(Vec::<(String, bool)>::new()));
         let executed_commands_for_subscription = executed_commands.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event: &super::Event, _| {
+            ctx.subscribe_to_view(&input, move |_, event: &super::Event, _| {
                 if let super::Event::ExecuteCommand(event) = event {
                     executed_commands_for_subscription
                         .borrow_mut()
@@ -1470,7 +1470,7 @@ fn empty_buffer_enter_sends_top_queued_prompt_then_next_on_repeat() {
         let ai_query_count = Rc::new(RefCell::new(0));
         let ai_query_count_for_subscription = ai_query_count.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event: &super::Event, _| {
+            ctx.subscribe_to_view(&input, move |_, event: &super::Event, _| {
                 if matches!(event, super::Event::ExecuteAIQuery) {
                     *ai_query_count_for_subscription.borrow_mut() += 1;
                 }
@@ -1524,7 +1524,7 @@ fn empty_buffer_enter_executes_top_queued_command() {
         let executed_commands = Rc::new(RefCell::new(Vec::<(String, bool)>::new()));
         let executed_commands_for_subscription = executed_commands.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event: &super::Event, _| {
+            ctx.subscribe_to_view(&input, move |_, event: &super::Event, _| {
                 if let super::Event::ExecuteCommand(event) = event {
                     executed_commands_for_subscription
                         .borrow_mut()
@@ -7776,7 +7776,7 @@ fn enter_submits_when_submit_on_ctrl_enter_is_false() {
         let submitted: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let submitted_clone = submitted.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event, _| {
+            ctx.subscribe_to_view(&input, move |_, event, _| {
                 if let Event::SubmitCLIAgentInput { text } = event {
                     submitted_clone.borrow_mut().push(text.clone());
                 }
@@ -7832,7 +7832,7 @@ fn ctrl_enter_emits_ctrl_enter_event_when_submit_on_ctrl_enter_is_false() {
         let ctrl_enter_clone = ctrl_enter_fired.clone();
         let submitted_clone = submitted.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event, _| match event {
+            ctx.subscribe_to_view(&input, move |_, event, _| match event {
                 Event::CtrlEnter => *ctrl_enter_clone.borrow_mut() = true,
                 Event::SubmitCLIAgentInput { text } => {
                     submitted_clone.borrow_mut().push(text.clone())
@@ -7885,7 +7885,7 @@ fn enter_inserts_newline_when_submit_on_ctrl_enter_is_true() {
         let submitted: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let submitted_clone = submitted.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event, _| {
+            ctx.subscribe_to_view(&input, move |_, event, _| {
                 if let Event::SubmitCLIAgentInput { text } = event {
                     submitted_clone.borrow_mut().push(text.clone());
                 }
@@ -7942,7 +7942,7 @@ fn ctrl_enter_submits_when_submit_on_ctrl_enter_is_true() {
         let submitted_clone = submitted.clone();
         let ctrl_enter_clone = ctrl_enter_fired.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event, _| match event {
+            ctx.subscribe_to_view(&input, move |_, event, _| match event {
                 Event::SubmitCLIAgentInput { text } => {
                     submitted_clone.borrow_mut().push(text.clone())
                 }
@@ -8008,7 +8008,7 @@ fn ctrl_enter_with_selection_preserves_selection_in_submit_when_setting_is_true(
         let submitted: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let submitted_clone = submitted.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event, _| {
+            ctx.subscribe_to_view(&input, move |_, event, _| {
                 if let Event::SubmitCLIAgentInput { text } = event {
                     submitted_clone.borrow_mut().push(text.clone());
                 }
@@ -8111,7 +8111,7 @@ fn enter_accepts_inline_menu_item_when_submit_on_ctrl_enter_is_true() {
         let submitted: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
         let submitted_clone = submitted.clone();
         app.update(|ctx| {
-            ctx.subscribe_to_view(&input, move |_, _, event, _| {
+            ctx.subscribe_to_view(&input, move |_, event, _| {
                 if let Event::SubmitCLIAgentInput { text } = event {
                     submitted_clone.borrow_mut().push(text.clone());
                 }
