@@ -22985,6 +22985,8 @@ impl TypedActionView for Workspace {
             CycleNextSession => self.cycle_next_session(ctx),
             MoveActiveTabLeft => self.move_tab(self.active_tab_index, TabMovement::Left, ctx),
             MoveActiveTabRight => self.move_tab(self.active_tab_index, TabMovement::Right, ctx),
+            MoveActiveTabToDedicatedHotkeyWindow => self.move_active_tab_to_dedicated_hotkey_window(ctx),
+            MoveActiveTabToStandardWindow => self.move_active_tab_to_standard_window(ctx),
             MoveTabLeft(index) => self.move_tab(*index, TabMovement::Left, ctx),
             MoveTabRight(index) => self.move_tab(*index, TabMovement::Right, ctx),
             RenameTab(index) => self.rename_tab(*index, ctx),
@@ -25292,6 +25294,10 @@ impl View for Workspace {
             }
         };
 
+        if crate::root_view::quake_mode_window_id() == Some(self.window_id) {
+            context.set.insert("Workspace_InQuakeWindow");
+        }
+
         if WarpDriveSettings::is_warp_drive_enabled(app) {
             context.set.insert(flags::ENABLE_WARP_DRIVE);
         }
@@ -27084,6 +27090,109 @@ impl Workspace {
         CrossWindowTabDrag::handle(ctx).update(ctx, |drag, ctx| {
             drag.execute_handoff_multi_tab_to_other(target, ctx);
         });
+    }
+
+    pub fn move_active_tab_to_dedicated_hotkey_window(&mut self, ctx: &mut ViewContext<Self>) {
+        let mut quake_window_id = quake_mode_window_id();
+        
+        if quake_window_id.is_none() && *KeysSettings::as_ref(ctx).quake_mode_enabled {
+            // Dedicated hotkey window is enabled but not open/created yet. Open it first.
+            let global_resource_handles = crate::GlobalResourceHandlesProvider::handle(ctx)
+                .as_ref(ctx)
+                .get()
+                .clone();
+            ctx.dispatch_global_action("root_view:toggle_quake_mode_window", global_resource_handles);
+            quake_window_id = quake_mode_window_id();
+        }
+
+        let Some(target_window_id) = quake_window_id else {
+            log::warn!("Dedicated hotkey window is not enabled or could not be opened.");
+            return;
+        };
+
+        self.move_active_tab_to_window(target_window_id, ctx);
+    }
+
+    pub fn move_active_tab_to_standard_window(&mut self, ctx: &mut ViewContext<Self>) {
+        let quake_window_id = quake_mode_window_id();
+        
+        let other_window_id = ctx.window_ids()
+            .find(|&id| Some(id) != quake_window_id && id != ctx.window_id());
+
+        if let Some(target_window_id) = other_window_id {
+            self.move_active_tab_to_window(target_window_id, ctx);
+        } else {
+            // Promote tab to a new standard window
+            let source_window_id = ctx.window_id();
+            let source_tab_index = self.active_tab_index;
+            let Some(mut transfer_info) = self.get_tab_transfer_info_for_attach(source_tab_index, ctx) else {
+                log::warn!("Could not get transfer info for tab at index {}", source_tab_index);
+                return;
+            };
+            transfer_info.draggable_state = DraggableState::default();
+
+            self.prepare_for_transferred_tab_attach(&transfer_info.pane_group, ctx);
+
+            let window_size = ctx.window_bounds(&source_window_id).map(|b| b.size()).unwrap_or_else(|| Vector2F::new(1280., 800.));
+            let window_position = Vector2F::new(100., 100.);
+
+            let new_window_id = crate::root_view::create_transferred_window(
+                transfer_info,
+                source_window_id,
+                window_size,
+                window_position,
+                false, // is_tab_drag_preview = false
+                ctx,
+            );
+
+            let source_was_single_tab = self.tabs.len() == 1;
+            if source_was_single_tab {
+                self.close_window_for_content_transfer(ctx);
+            } else {
+                self.remove_tab_without_undo(source_tab_index, ctx);
+            }
+
+            ctx.windows().show_window_and_focus_app(new_window_id);
+            ctx.dispatch_global_action("workspace:save_app", ());
+        }
+    }
+
+    fn move_active_tab_to_window(&mut self, target_window_id: WindowId, ctx: &mut ViewContext<Self>) {
+        let source_window_id = ctx.window_id();
+        let source_tab_index = self.active_tab_index;
+
+        let Some(target_workspace) = WorkspaceRegistry::as_ref(ctx).get(target_window_id, ctx) else {
+            log::warn!("Could not find target workspace for window {:?}", target_window_id);
+            return;
+        };
+
+        let Some(mut transfer_info) = self.get_tab_transfer_info_for_attach(source_tab_index, ctx) else {
+            log::warn!("Could not get transfer info for tab at index {}", source_tab_index);
+            return;
+        };
+        transfer_info.draggable_state = DraggableState::default();
+
+        self.prepare_for_transferred_tab_attach(&transfer_info.pane_group, ctx);
+
+        let pane_group_id = transfer_info.pane_group.id();
+        ctx.transfer_view_tree_to_window(pane_group_id, source_window_id, target_window_id);
+
+        let source_was_single_tab = self.tabs.len() == 1;
+
+        if source_was_single_tab {
+            self.close_window_for_content_transfer(ctx);
+        } else {
+            self.remove_tab_without_undo(source_tab_index, ctx);
+        }
+
+        target_workspace.update(ctx, move |target_ws, ctx| {
+            let insertion_index = target_ws.tabs.len();
+            target_ws.insert_transferred_tab_at_index(transfer_info, insertion_index, ctx);
+            target_ws.focus_active_tab(ctx);
+        });
+
+        ctx.windows().show_window_and_focus_app(target_window_id);
+        ctx.dispatch_global_action("workspace:save_app", ());
     }
 
     /// Handles a tab drag event from the `Draggable` element. Dispatches to

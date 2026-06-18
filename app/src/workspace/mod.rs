@@ -481,6 +481,20 @@ pub fn init(app: &mut AppContext) {
 
     app.register_editable_bindings([
         EditableBinding::new(
+            "workspace:move_active_tab_to_dedicated_hotkey_window",
+            "Move active tab to dedicated hotkey window",
+            WorkspaceAction::MoveActiveTabToDedicatedHotkeyWindow,
+        )
+        .with_context_predicate(id!("Workspace") & !id!("Workspace_InQuakeWindow"))
+        .with_group(bindings::BindingGroup::Navigation.as_str()),
+        EditableBinding::new(
+            "workspace:move_active_tab_to_standard_window",
+            "Move active tab to standard window",
+            WorkspaceAction::MoveActiveTabToStandardWindow,
+        )
+        .with_context_predicate(id!("Workspace") & id!("Workspace_InQuakeWindow"))
+        .with_group(bindings::BindingGroup::Navigation.as_str()),
+        EditableBinding::new(
             "workspace:show_theme_chooser",
             "Open theme picker",
             WorkspaceAction::ShowThemeChooserForActiveTheme,
