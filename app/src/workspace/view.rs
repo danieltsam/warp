@@ -22987,6 +22987,7 @@ impl TypedActionView for Workspace {
             MoveActiveTabRight => self.move_tab(self.active_tab_index, TabMovement::Right, ctx),
             MoveActiveTabToDedicatedHotkeyWindow => self.move_active_tab_to_dedicated_hotkey_window(ctx),
             MoveActiveTabToStandardWindow => self.move_active_tab_to_standard_window(ctx),
+            ToggleActiveTabWindowType => self.toggle_active_tab_window_type(ctx),
             MoveTabLeft(index) => self.move_tab(*index, TabMovement::Left, ctx),
             MoveTabRight(index) => self.move_tab(*index, TabMovement::Right, ctx),
             RenameTab(index) => self.rename_tab(*index, ctx),
@@ -27093,16 +27094,22 @@ impl Workspace {
     }
 
     pub fn move_active_tab_to_dedicated_hotkey_window(&mut self, ctx: &mut ViewContext<Self>) {
-        let mut quake_window_id = quake_mode_window_id();
-        
-        if quake_window_id.is_none() && *KeysSettings::as_ref(ctx).quake_mode_enabled {
+        if !*KeysSettings::as_ref(ctx).quake_mode_enabled {
+            log::warn!("Dedicated hotkey window is not enabled.");
+            return;
+        }
+
+        let mut quake_window_id = quake_mode_window_id().filter(|&id| ctx.is_window_open(id));
+        let quake_is_open = crate::root_view::quake_mode_window_is_open();
+
+        if quake_window_id.is_none() || !quake_is_open {
             // Dedicated hotkey window is enabled but not open/created yet. Open it first.
             let global_resource_handles = crate::GlobalResourceHandlesProvider::handle(ctx)
                 .as_ref(ctx)
                 .get()
                 .clone();
-            ctx.dispatch_global_action("root_view:toggle_quake_mode_window", global_resource_handles);
-            quake_window_id = quake_mode_window_id();
+            crate::root_view::toggle_quake_mode_window(&global_resource_handles, ctx);
+            quake_window_id = quake_mode_window_id().filter(|&id| ctx.is_window_open(id));
         }
 
         let Some(target_window_id) = quake_window_id else {
@@ -27114,7 +27121,7 @@ impl Workspace {
     }
 
     pub fn move_active_tab_to_standard_window(&mut self, ctx: &mut ViewContext<Self>) {
-        let quake_window_id = quake_mode_window_id();
+        let quake_window_id = quake_mode_window_id().filter(|&id| ctx.is_window_open(id));
         
         let other_window_id = ctx.window_ids()
             .find(|&id| Some(id) != quake_window_id && id != ctx.window_id());
@@ -27122,11 +27129,20 @@ impl Workspace {
         if let Some(target_window_id) = other_window_id {
             self.move_active_tab_to_window(target_window_id, ctx);
         } else {
-            // Promote tab to a new standard window
+            // Promote selected tabs to a new standard window
             let source_window_id = ctx.window_id();
-            let source_tab_index = self.active_tab_index;
-            let Some(mut transfer_info) = self.get_tab_transfer_info_for_attach(source_tab_index, ctx) else {
-                log::warn!("Could not get transfer info for tab at index {}", source_tab_index);
+            let selected_indices = {
+                let indices = self.selected_tab_indices();
+                if indices.is_empty() {
+                    vec![self.active_tab_index]
+                } else {
+                    indices
+                }
+            };
+
+            let first_index = selected_indices[0];
+            let Some(mut transfer_info) = self.get_tab_transfer_info_for_attach(first_index, ctx) else {
+                log::warn!("Could not get transfer info for tab at index {}", first_index);
                 return;
             };
             transfer_info.draggable_state = DraggableState::default();
@@ -27145,51 +27161,120 @@ impl Workspace {
                 ctx,
             );
 
-            let source_was_single_tab = self.tabs.len() == 1;
+            // Move the remaining selected tabs to the newly created standard window
+            let remaining_indices = selected_indices[1..].to_vec();
+            let mut remaining_transfers = Vec::new();
+            for &index in &remaining_indices {
+                if let Some(mut r_info) = self.get_tab_transfer_info_for_attach(index, ctx) {
+                    r_info.draggable_state = DraggableState::default();
+                    remaining_transfers.push((index, r_info));
+                }
+            }
+
+            for (_, r_info) in &remaining_transfers {
+                self.prepare_for_transferred_tab_attach(&r_info.pane_group, ctx);
+                let pane_group_id = r_info.pane_group.id();
+                ctx.transfer_view_tree_to_window(pane_group_id, source_window_id, new_window_id);
+            }
+
+            let source_was_single_tab = self.tabs.len() == selected_indices.len();
             if source_was_single_tab {
                 self.close_window_for_content_transfer(ctx);
             } else {
-                self.remove_tab_without_undo(source_tab_index, ctx);
+                let mut sorted_indices = selected_indices.clone();
+                sorted_indices.sort_by(|a, b| b.cmp(a));
+                for index in sorted_indices {
+                    self.remove_tab_without_undo(index, ctx);
+                }
             }
+
+            // Insert the remaining transferred tabs in target workspace
+            if let Some(target_workspace) = WorkspaceRegistry::as_ref(ctx).get(new_window_id, ctx) {
+                target_workspace.update(ctx, move |target_ws, ctx| {
+                    for (_, r_info) in remaining_transfers {
+                        let insertion_index = target_ws.tabs.len();
+                        target_ws.insert_transferred_tab_at_index(r_info, insertion_index, ctx);
+                    }
+                    target_ws.focus_active_tab(ctx);
+                });
+            }
+
 
             ctx.windows().show_window_and_focus_app(new_window_id);
             ctx.dispatch_global_action("workspace:save_app", ());
         }
     }
 
+    pub fn toggle_active_tab_window_type(&mut self, ctx: &mut ViewContext<Self>) {
+        let quake_window_id = quake_mode_window_id().filter(|&id| ctx.is_window_open(id));
+        if quake_window_id == Some(ctx.window_id()) {
+            self.move_active_tab_to_standard_window(ctx);
+        } else {
+            self.move_active_tab_to_dedicated_hotkey_window(ctx);
+        }
+    }
+
     fn move_active_tab_to_window(&mut self, target_window_id: WindowId, ctx: &mut ViewContext<Self>) {
         let source_window_id = ctx.window_id();
-        let source_tab_index = self.active_tab_index;
+        let selected_indices = {
+            let indices = self.selected_tab_indices();
+            if indices.is_empty() {
+                vec![self.active_tab_index]
+            } else {
+                indices
+            }
+        };
 
         let Some(target_workspace) = WorkspaceRegistry::as_ref(ctx).get(target_window_id, ctx) else {
             log::warn!("Could not find target workspace for window {:?}", target_window_id);
             return;
         };
 
-        let Some(mut transfer_info) = self.get_tab_transfer_info_for_attach(source_tab_index, ctx) else {
-            log::warn!("Could not get transfer info for tab at index {}", source_tab_index);
+        // Gather all transfer info first
+        let mut transfers = Vec::new();
+        for &index in &selected_indices {
+            if let Some(mut transfer_info) = self.get_tab_transfer_info_for_attach(index, ctx) {
+                transfer_info.draggable_state = DraggableState::default();
+                transfers.push((index, transfer_info));
+            } else {
+                log::warn!("Could not get transfer info for tab at index {}", index);
+            }
+        }
+
+        if transfers.is_empty() {
             return;
-        };
-        transfer_info.draggable_state = DraggableState::default();
+        }
 
-        self.prepare_for_transferred_tab_attach(&transfer_info.pane_group, ctx);
+        // Prepare and transfer each pane group
+        for (_, transfer_info) in &transfers {
+            self.prepare_for_transferred_tab_attach(&transfer_info.pane_group, ctx);
+            let pane_group_id = transfer_info.pane_group.id();
+            ctx.transfer_view_tree_to_window(pane_group_id, source_window_id, target_window_id);
+        }
 
-        let pane_group_id = transfer_info.pane_group.id();
-        ctx.transfer_view_tree_to_window(pane_group_id, source_window_id, target_window_id);
+        let source_was_single_tab = self.tabs.len() == selected_indices.len();
 
-        let source_was_single_tab = self.tabs.len() == 1;
-
+        // Remove tabs from source workspace
         if source_was_single_tab {
             self.close_window_for_content_transfer(ctx);
         } else {
-            self.remove_tab_without_undo(source_tab_index, ctx);
+            // Remove from highest to lowest index to avoid index shift issues
+            let mut sorted_indices = selected_indices.clone();
+            sorted_indices.sort_by(|a, b| b.cmp(a));
+            for index in sorted_indices {
+                self.remove_tab_without_undo(index, ctx);
+            }
         }
 
+        // Insert tabs into target workspace
         target_workspace.update(ctx, move |target_ws, ctx| {
-            let insertion_index = target_ws.tabs.len();
-            target_ws.insert_transferred_tab_at_index(transfer_info, insertion_index, ctx);
+            for (_, transfer_info) in transfers {
+                let insertion_index = target_ws.tabs.len();
+                target_ws.insert_transferred_tab_at_index(transfer_info, insertion_index, ctx);
+            }
             target_ws.focus_active_tab(ctx);
         });
+
 
         ctx.windows().show_window_and_focus_app(target_window_id);
         ctx.dispatch_global_action("workspace:save_app", ());

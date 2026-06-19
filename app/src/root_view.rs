@@ -1331,7 +1331,7 @@ fn get_quake_mode_state(ctx: &mut AppContext) -> Option<QuakeModeState> {
     }
 }
 
-fn toggle_quake_mode_window(global_resource_handles: &GlobalResourceHandles, ctx: &mut AppContext) {
+pub(crate) fn toggle_quake_mode_window(global_resource_handles: &GlobalResourceHandles, ctx: &mut AppContext) {
     // Get the current state of quake mode.
     let state = get_quake_mode_state(ctx);
     match state {

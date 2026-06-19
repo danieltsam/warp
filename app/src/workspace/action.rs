@@ -136,6 +136,7 @@ pub enum WorkspaceAction {
     MoveTabRight(usize),
     MoveActiveTabToDedicatedHotkeyWindow,
     MoveActiveTabToStandardWindow,
+    ToggleActiveTabWindowType,
     RenameTab(usize),
     ResetTabName(usize),
     RenamePane(PaneViewLocator),
@@ -869,6 +870,7 @@ impl WorkspaceAction {
             | MoveTabRight(_)
             | MoveActiveTabToDedicatedHotkeyWindow
             | MoveActiveTabToStandardWindow
+            | ToggleActiveTabWindowType
             | DropTab
             | DropGroup
             | RenameTab(_)

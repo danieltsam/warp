@@ -485,14 +485,21 @@ pub fn init(app: &mut AppContext) {
             "Move active tab to dedicated hotkey window",
             WorkspaceAction::MoveActiveTabToDedicatedHotkeyWindow,
         )
-        .with_context_predicate(id!("Workspace") & !id!("Workspace_InQuakeWindow"))
+        .with_context_predicate(id!("Workspace") & id!(flags::QUAKE_MODE_ENABLED_CONTEXT_FLAG) & !id!("Workspace_InQuakeWindow"))
         .with_group(bindings::BindingGroup::Navigation.as_str()),
         EditableBinding::new(
             "workspace:move_active_tab_to_standard_window",
             "Move active tab to standard window",
             WorkspaceAction::MoveActiveTabToStandardWindow,
         )
-        .with_context_predicate(id!("Workspace") & id!("Workspace_InQuakeWindow"))
+        .with_context_predicate(id!("Workspace") & id!(flags::QUAKE_MODE_ENABLED_CONTEXT_FLAG) & id!("Workspace_InQuakeWindow"))
+        .with_group(bindings::BindingGroup::Navigation.as_str()),
+        EditableBinding::new(
+            "workspace:toggle_active_tab_window_type",
+            "Toggle active tab window type (dedicated hotkey vs standard)",
+            WorkspaceAction::ToggleActiveTabWindowType,
+        )
+        .with_context_predicate(id!("Workspace") & id!(flags::QUAKE_MODE_ENABLED_CONTEXT_FLAG))
         .with_group(bindings::BindingGroup::Navigation.as_str()),
         EditableBinding::new(
             "workspace:show_theme_chooser",

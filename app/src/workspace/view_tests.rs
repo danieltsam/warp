@@ -4110,3 +4110,47 @@ fn test_pin_tab_on_grouped_tab_extracts_then_pins() {
         });
     });
 }
+
+#[test]
+fn test_move_active_tab_to_window() {
+    App::test((), |mut app| async move {
+        initialize_app(&mut app);
+
+        let ws1 = mock_workspace(&mut app);
+        let ws2 = mock_workspace(&mut app);
+
+        let ws2_window_id = ws2.read(&app, |ws, _| ws.window_id);
+
+        // Add an extra terminal tab in ws1 so it has 2 tabs
+        ws1.update(&mut app, |workspace, ctx| {
+            workspace.add_terminal_tab(false, ctx);
+            assert_eq!(workspace.tab_count(), 2);
+        });
+
+        // The active tab of ws1 is index 1
+        ws1.read(&app, |workspace, _| {
+            assert_eq!(workspace.active_tab_index, 1);
+        });
+
+        // ws2 starts with 1 tab
+        ws2.read(&app, |workspace, _| {
+            assert_eq!(workspace.tab_count(), 1);
+        });
+
+        // Act: move active tab from ws1 to ws2
+        ws1.update(&mut app, |workspace, ctx| {
+            workspace.move_active_tab_to_window(ws2_window_id, ctx);
+        });
+
+        // Assert: ws1 now has 1 tab, ws2 now has 2 tabs
+        ws1.read(&app, |workspace, _| {
+            assert_eq!(workspace.tab_count(), 1);
+        });
+
+        ws2.read(&app, |workspace, _| {
+            assert_eq!(workspace.tab_count(), 2);
+            assert_eq!(workspace.active_tab_index, 1);
+        });
+    });
+}
+

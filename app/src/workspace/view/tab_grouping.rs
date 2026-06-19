@@ -105,7 +105,7 @@ impl Workspace {
     /// The active tab index is always included if any other tab is marked
     /// as selected. This is to handle the edge case where we only mark other
     /// tabs as selected via command click.
-    fn selected_tab_indices(&self) -> Vec<usize> {
+    pub(crate) fn selected_tab_indices(&self) -> Vec<usize> {
         let any_flagged = self.tabs.iter().any(|tab| tab.in_multi_selection);
         // If no tab is part of the multi selection, return empty list.
         if !any_flagged {
